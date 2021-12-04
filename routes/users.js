@@ -123,6 +123,61 @@ router.post("/login", async (req, res) => {
   res.status(200).send(JSON.stringify({ status: "User login successful" }));
 });
 
+//Change password
+router.post("/changePass", async function (req, res)
+{
+  var con = general.getConn();
+  var errors = [];
+  responseUsername = await con.promise().query("select count(*) as cnt from users where username=?", [req.body.username]);
+  responsePassword = await con.promise().query("select password from users where username=?", [req.body.username]);
+  console.log("req:" + req.body.username, req.body.oldPassword, req.body.newPassword ,req.body.confirmNewPassword);
+  console.log("exist: ", responseUsername[0][0].cnt);
+  if (responseUsername[0][0].cnt === 0) {
+    res.status(400);
+    res.send(JSON.stringify({ error: "Incorrect username" }));
+    con.end();
+    return false;
+  }
+  console.log("responsePassword: ", responsePassword[0][0].password);
+  console.log("req.body.oldPassword: ", req.body.oldPassword);
+  if (!compareIt(req.body.oldPassword, responsePassword[0][0].password))
+  {
+    res.status(400).send(JSON.stringify({ error: "Incorrect username" }));
+    con.end();
+    return false;
+  }
+  if (req.body.newPassword < 10) {
+    console.log("password:", req.body.password);
+    errors.push("Password must be at least 10 characters");
+  }
+  if (req.body.newPassword !== req.body.confirmNewPassword) {
+    console.log("Passwords do not match");
+    errors.push("Passwords do not match");
+  }
+  if (errors.length !== 0) {
+    res.status(400).send(JSON.stringify({ error: "Incorrect Password" }));
+    con.end();
+    return false;
+  }
+
+  const salt = await bcrypt.genSalt(10);
+  console.log("salt: " + salt);
+  const hashedPassword = await bcrypt.hash(req.body.newPassword, salt);
+  console.log("hashedPassword: " + hashedPassword);
+  var createQuery = await con.promise().query("UPDATE users SET password=? WHERE username=?", [hashedPassword, req.body.username]);
+  console.log("createdQuery: " + createQuery[0].insertId);
+
+  userId = createQuery[0].insertId;
+  res.send(JSON.stringify({ status: "password changed successfully. userId:" + userId }));
+
+});
+
+
+async function compareIt(password, hashedPassword){
+  const validPassword = await bcrypt.compare(password, hashedPassword);
+  return validPassword;
+};
+
 
 
 module.exports = router;
