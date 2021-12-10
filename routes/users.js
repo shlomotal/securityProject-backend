@@ -1,7 +1,7 @@
 const express = require("express"),
   router = express.Router();
 const bcrypt = require("bcryptjs");
-
+const config = require("config")
 const general = require("../modules/general");
 
 // get user lists
@@ -24,7 +24,7 @@ router.post("/signup", async function (req, res) {
     req.body.password,
     req.body.confirmPassword
   );
-  if (req.body.password < 10) {
+  if (req.body.password < config.get("passwordLength")) {
     console.log("password:", req.body.password);
     errors.push("Password must be at least 10 characters");
   }
@@ -151,7 +151,7 @@ router.post("/changePass", async function (req, res)
     con.end();
     return false;
   }
-  if (req.body.newPassword < 10) {
+  if (req.body.newPassword < config.get("passwordLength")) {
     console.log("password:", req.body.password);
     errors.push("Password must be at least 10 characters");
   }
