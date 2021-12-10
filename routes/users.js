@@ -140,9 +140,14 @@ router.post("/changePass", async function (req, res)
   }
   console.log("responsePassword: ", responsePassword[0][0].password);
   console.log("req.body.oldPassword: ", req.body.oldPassword);
-  if (!compareIt(req.body.oldPassword, responsePassword[0][0].password))
+  const validPass = await bcrypt.compare(
+    req.body.oldPassword,
+    responsePassword[0][0].password
+  );
+  console.log('valid password: ' + validPass);
+  if (!validPass)
   {
-    res.status(400).send(JSON.stringify({ error: "Incorrect username" }));
+    res.status(400).send(JSON.stringify({ error: "Incorrect Password" }));
     con.end();
     return false;
   }
@@ -168,16 +173,9 @@ router.post("/changePass", async function (req, res)
   console.log("createdQuery: " + createQuery[0].insertId);
 
   userId = createQuery[0].insertId;
-  res.send(JSON.stringify({ status: "password changed successfully. userId:" + userId }));
+  res.status(200).send(JSON.stringify({ status: "password changed successfully. userId:" + userId }));
 
 });
-
-
-async function compareIt(password, hashedPassword){
-  const validPassword = await bcrypt.compare(password, hashedPassword);
-  return validPassword;
-};
-
 
 
 module.exports = router;
