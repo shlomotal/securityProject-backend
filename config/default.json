@@ -1,0 +1,7 @@
+{
+    "passwordLength": 10,
+    "complexPassword": true,
+    "passwordHistoryLength": 3,
+    "passwordDictonary": true,
+    "loginRetries": 3
+}
