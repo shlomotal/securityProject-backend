@@ -19,7 +19,11 @@ router.get("/getAll", async function (req, res) {
 // create new user
 router.post("/signup", async function (req, res) {
   var complexPassword = config.get("complexPassword");
-  var strongRegex = new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#\$%\^&\*])(?=.{" + config.get("passwordLength") + ",})");
+  var strongRegex = new RegExp(
+    "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])(?=.{" +
+      config.get("passwordLength") +
+      ",})"
+  );
   var errors = [];
   var con = general.getConn();
   console.log(
@@ -27,17 +31,17 @@ router.post("/signup", async function (req, res) {
     req.body.password,
     req.body.confirmPassword
   );
-  if (complexPassword){
-    if(!strongRegex.test(req.body.password)){
-      res.status(400).send(JSON.stringify({ error: "You chose complex password and its to weak" }));
+  if (complexPassword) {
+    if (!strongRegex.test(req.body.password)) {
+      res.status(400).send(
+        JSON.stringify({
+          error: "You chose complex password and its to weak",
+        })
+      );
       return false;
     }
-    console.log("Great! its complex password")
+    console.log("Great! its complex password");
   }
- // if (req.body.password < config.get("passwordLength")) {
- //   console.log("password:", req.body.password);
-  //  errors.push("Password must be at least 10 characters");
-  //}
   if (req.body.confirmPassword !== req.body.password) {
     console.log("Passwords do not match");
     errors.push("Passwords do not match");
@@ -91,17 +95,16 @@ router.post("/signup", async function (req, res) {
       ]);
     console.log("createdQuery: " + createQuery[0].insertId);
     userId = createQuery[0].insertId;
+
+    var insertIntoFailedLogins = await con
+      .promise()
+      .query("insert into failed_logins (userId, failsCount) values (?,0)", [
+        userId,
+      ]);
     res.send(
       JSON.stringify({ status: "User created successfully. userId:" + userId })
     );
-    //   await con
-    //     .promise()
-    //     .query("insert into salts values (0,?,?)", [userId, salt]);
-    //   return true;
-    // } else {
-    //   res.send(JSON.stringify({ status: "error", errors }));
-    //   con.end();
-    //   return false;
+    console.log("insert into failed_logins: " + insertIntoFailedLogins);
   }
 });
 
@@ -137,15 +140,53 @@ router.post("/login", async (req, res) => {
     req.body.password,
     responsePassword[0][0].password
   );
-  if (!validPass) return res.status(400).send("Username or password INCORRECT");
+  userId = await con
+    .promise()
+    .query("select id from users where username=?", [req.body.username]);
+  console.log("user id: ", userId[0][0].id);
 
-  //CREATE AND ASSIGN A TOKEN
-  // const token = jwt.sign({ _id: user._id }, process.env.TOKEN_SECRET);
-  // res
-  //   .header("authToken", token)
-  //   .header("Content-Type", "application/json")
-  //   .send(JSON.stringify(token));
+  if (!validPass) {
+    failedLogins(userId[0][0].id);
 
+    res
+      .status(400)
+      .send(JSON.stringify({ error: "Username or password INCORRECT" }));
+    con.end();
+    return false;
+  }
+
+  // checking if the user is locked
+  var dateLock = await con
+    .promise()
+    .query("SELECT dateLock FROM `failed_logins` WHERE `userId`=? LIMIT 1", [
+      userId[0][0].id,
+    ]);
+  console.log("*** checking dateLock: ", Object.values(dateLock[0][0])[0]);
+  if (Object.values(dateLock[0][0])[0]) {
+    var isTimePassed = await con
+      .promise()
+      .query(
+        "SELECT count(*) from failed_logins T where TIMESTAMPDIFF(MINUTE, T.dateLock, now()) > ? and userId = ?",
+        [config.get("lockTimeInMinutes"), userId[0][0].id]
+      );
+    console.log("isTimePassed: ", Object.values(isTimePassed[0][0])[0]);
+    if (Object.values(isTimePassed[0][0])[0] == 0) {
+      console.log("user locked");
+      res.status(400).send(JSON.stringify({ error: "User locked" }));
+      con.end();
+      return false;
+    } else {
+      // update failed logins table
+      console.log("updading failed logins table");
+      var updateFailedLogins = await con
+        .promise()
+        .query(
+          "update failed_logins set failsCount=0, lastFail=null, dateLock=null where userId=?",
+          [userId[0][0].id]
+        );
+      console.log("updated: ", updateFailedLogins);
+    }
+  }
   //update last login
   await con
     .promise()
@@ -156,15 +197,29 @@ router.post("/login", async (req, res) => {
 });
 
 //Change password
-router.post("/changePass", async function (req, res)
-{
+router.post("/changePass", async function (req, res) {
   var complexPassword = config.get("complexPassword");
-  var strongRegex = new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#\$%\^&\*])(?=.{" + config.get("passwordLength") + ",})");
+  var strongRegex = new RegExp(
+    "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])(?=.{" +
+      config.get("passwordLength") +
+      ",})"
+  );
   var con = general.getConn();
   var errors = [];
-  responseUsername = await con.promise().query("select count(*) as cnt from users where username=?", [req.body.username]);
-  responsePassword = await con.promise().query("select password from users where username=?", [req.body.username]);
-  console.log("req:" + req.body.username, req.body.oldPassword, req.body.newPassword ,req.body.confirmNewPassword);
+  responseUsername = await con
+    .promise()
+    .query("select count(*) as cnt from users where username=?", [
+      req.body.username,
+    ]);
+  responsePassword = await con
+    .promise()
+    .query("select password from users where username=?", [req.body.username]);
+  console.log(
+    "req:" + req.body.username,
+    req.body.oldPassword,
+    req.body.newPassword,
+    req.body.confirmNewPassword
+  );
   console.log("exist: ", responseUsername[0][0].cnt);
   if (responseUsername[0][0].cnt === 0) {
     res.status(400);
@@ -178,10 +233,20 @@ router.post("/changePass", async function (req, res)
     req.body.oldPassword,
     responsePassword[0][0].password
   );
-  console.log('valid password: ' + validPass);
-  if (!validPass)
-  {
-    res.status(400).send(JSON.stringify({ error: "Incorrect Password" }));
+
+  // getting user id
+  userId = await con
+    .promise()
+    .query("select id from users where username=?", [req.body.username]);
+  console.log("user id: ", userId[0][0].id);
+
+  console.log("valid password: " + validPass);
+  if (!validPass) {
+    failedLogins(userId[0][0].id);
+
+    res
+      .status(400)
+      .send(JSON.stringify({ error: "Username or password INCORRECT" }));
     con.end();
     return false;
   }
@@ -189,13 +254,17 @@ router.post("/changePass", async function (req, res)
     console.log("Passwords do not match");
     errors.push("Passwords do not match");
   }
-  if (complexPassword){
-    if(!strongRegex.test(req.body.newPassword)){
-      res.status(400).send(JSON.stringify({ error: "You chose complex password and its to weak" }));
+  if (complexPassword) {
+    if (!strongRegex.test(req.body.newPassword)) {
+      res.status(400).send(
+        JSON.stringify({
+          error: "You chose complex password and its to weak",
+        })
+      );
       con.end();
       return false;
     }
-    console.log("Great! its complex password")
+    console.log("Great! its complex password");
   }
   console.log(config.get("passwordDictonary"));
   if (config.get("passwordDictonary")) {
@@ -225,44 +294,64 @@ router.post("/changePass", async function (req, res)
   console.log("salt: " + salt);
   const hashedPassword = await bcrypt.hash(req.body.newPassword, salt);
   console.log("hashedPassword: " + hashedPassword);
-  var createQuery = await con.promise().query("UPDATE users SET password=? WHERE username=?", [hashedPassword, req.body.username]);
+  var createQuery = await con
+    .promise()
+    .query("UPDATE users SET password=? WHERE username=?", [
+      hashedPassword,
+      req.body.username,
+    ]);
   console.log("createdQuery: " + createQuery[0].insertId);
 
   userId = createQuery[0].insertId;
-  res.status(200).send(JSON.stringify({ status: "password changed successfully. userId:" + userId }));
-
+  res.status(200).send(
+    JSON.stringify({
+      status: "password changed successfully. userId:" + userId,
+    })
+  );
 });
 
-	// JavaScript program to check if the string
-	// contains uppercase, lowercase
-	// special character & numeric value
+async function failedLogins(userId) {
+  var con = general.getConn();
 
-	function isAllPresent(i_password) {
-		// Regex to check if a string
-		// contains uppercase, lowercase
-		// special character & numeric value
-		var pattern = new RegExp(
-		"^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[-+_!@#$%^&*.,?]).+$"
-		);
+  // getting count of failed login attempts
+  var countFailedLogins = await con
+    .promise()
+    .query("select failsCount from failed_logins where userId=?", userId);
+  console.log("count of failed logins: ", countFailedLogins[0][0].failsCount);
 
-		// If the string is empty
-		// then print No
-		if (!i_password || i_password.length === 0) {
-		document.write("No" + "<br>");
-		return;
-		}
+  // checking if need to lock
+  var dateLock = null;
+  if (countFailedLogins[0][0].failsCount == config.get("loginRetries") - 1) {
+    console.log("locking");
+    var locked = await con
+      .promise()
+      .query("update failed_logins set dateLock=now() where userId=?", [
+        userId,
+      ]);
+  }
 
-		// Print Yes If the string matches
-		// with the Regex
-		if (pattern.test(i_password)) {
-		document.write("Yes" + "<br>");
-		} else {
-		document.write("No" + "<br>");
-		}
-		return;
-	}
+  // checking if failed logins was already the maximun
+  var updatedCountFailedLogins = countFailedLogins[0][0].failsCount + 1;
+  if (updatedCountFailedLogins > config.get("loginRetries")) {
+    updatedCountFailedLogins = config.get("loginRetries");
+  }
 
+  console.log("updatedCountFailedLogins: ", updatedCountFailedLogins);
 
-
+  if (countFailedLogins[0][0].failsCount != config.get("loginRetries")) {
+    console.log("updating failed logins table");
+    var updateFailedLogins = await con
+      .promise()
+      .query("update failed_logins set failsCount=? where userId=?", [
+        updatedCountFailedLogins,
+        userId,
+      ]);
+    //console.log("updateFailedLogins: ", updateFailedLogins);
+  }
+  var updateLastFail = await con
+    .promise()
+    .query("update failed_logins set lastFail=now() where userId=?", [userId]);
+  console.log("updateLastFail: ", updateLastFail);
+}
 
 module.exports = router;
