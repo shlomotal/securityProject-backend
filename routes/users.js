@@ -1,7 +1,7 @@
 const express = require("express"),
   router = express.Router();
 const bcrypt = require("bcryptjs");
-const config = require("config")
+const config = require("config");
 const general = require("../modules/general");
 
 // get user lists
@@ -44,6 +44,27 @@ router.post("/signup", async function (req, res) {
       con.end();
       return false;
     }
+    if (config.get("passwordDictonary")) {
+      isPasswordInDictonaryPasswordsDb = await con
+        .promise()
+        .query(
+          "SELECT EXISTS(SELECT 1 FROM `dictonary_passwords` WHERE `password`=? LIMIT 1)",
+          [req.body.confirmPassword]
+        );
+      console.log(
+        "isPasswordInDictonaryPasswordsDb2: ",
+        Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0]
+      );
+      if (Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0] == 1) {
+        res
+          .status(400)
+          .send(
+            JSON.stringify({ error: "The password is very common, change it" })
+          );
+        con.end();
+        return false;
+      }
+    }
 
     //HASH PASSWORD
     const salt = await bcrypt.genSalt(10);
@@ -62,14 +83,14 @@ router.post("/signup", async function (req, res) {
     res.send(
       JSON.stringify({ status: "User created successfully. userId:" + userId })
     );
-  //   await con
-  //     .promise()
-  //     .query("insert into salts values (0,?,?)", [userId, salt]);
-  //   return true;
-  // } else {
-  //   res.send(JSON.stringify({ status: "error", errors }));
-  //   con.end();
-  //   return false;
+    //   await con
+    //     .promise()
+    //     .query("insert into salts values (0,?,?)", [userId, salt]);
+    //   return true;
+    // } else {
+    //   res.send(JSON.stringify({ status: "error", errors }));
+    //   con.end();
+    //   return false;
   }
 });
 
@@ -124,13 +145,14 @@ router.post("/login", async (req, res) => {
 });
 
 //Change password
-router.post("/changePass", async function (req, res)
-{
+router.post("/changePass", async function (req, res) {
   var con = general.getConn();
   var errors = [];
-  responseUsername = await con.promise().query("select count(*) as cnt from users where username=?", [req.body.username]);
-  responsePassword = await con.promise().query("select password from users where username=?", [req.body.username]);
-  console.log("req:" + req.body.username, req.body.oldPassword, req.body.newPassword ,req.body.confirmNewPassword);
+  responseUsername = await con
+    .promise()
+    .query("select count(*) as cnt from users where username=?", [
+      req.body.username,
+    ]);
   console.log("exist: ", responseUsername[0][0].cnt);
   if (responseUsername[0][0].cnt === 0) {
     res.status(400);
@@ -138,15 +160,23 @@ router.post("/changePass", async function (req, res)
     con.end();
     return false;
   }
+  responsePassword = await con
+    .promise()
+    .query("select password from users where username=?", [req.body.username]);
+  console.log(
+    "req:" + req.body.username,
+    req.body.oldPassword,
+    req.body.newPassword,
+    req.body.confirmNewPassword
+  );
   console.log("responsePassword: ", responsePassword[0][0].password);
   console.log("req.body.oldPassword: ", req.body.oldPassword);
   const validPass = await bcrypt.compare(
     req.body.oldPassword,
     responsePassword[0][0].password
   );
-  console.log('valid password: ' + validPass);
-  if (!validPass)
-  {
+  console.log("valid password: " + validPass);
+  if (!validPass) {
     res.status(400).send(JSON.stringify({ error: "Incorrect Password" }));
     con.end();
     return false;
@@ -159,6 +189,23 @@ router.post("/changePass", async function (req, res)
     console.log("Passwords do not match");
     errors.push("Passwords do not match");
   }
+  console.log(config.get("passwordDictonary"));
+  if (config.get("passwordDictonary")) {
+    isPasswordInDictonaryPasswordsDb = await con
+      .promise()
+      .query(
+        "SELECT EXISTS(SELECT 1 FROM `dictonary_passwords` WHERE `password`=? LIMIT 1)",
+        [req.body.confirmNewPassword]
+      );
+    console.log(
+      "isPasswordInDictonaryPasswordsDb2: ",
+      Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0]
+    );
+    if (Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0] == 1) {
+      console.log("Password in dictonary_passwords");
+      errors.push("Password in dictonary_passwords");
+    }
+  }
   if (errors.length !== 0) {
     res.status(400).send(JSON.stringify({ error: "Incorrect Password" }));
     con.end();
@@ -169,13 +216,20 @@ router.post("/changePass", async function (req, res)
   console.log("salt: " + salt);
   const hashedPassword = await bcrypt.hash(req.body.newPassword, salt);
   console.log("hashedPassword: " + hashedPassword);
-  var createQuery = await con.promise().query("UPDATE users SET password=? WHERE username=?", [hashedPassword, req.body.username]);
+  var createQuery = await con
+    .promise()
+    .query("UPDATE users SET password=? WHERE username=?", [
+      hashedPassword,
+      req.body.username,
+    ]);
   console.log("createdQuery: " + createQuery[0].insertId);
 
   userId = createQuery[0].insertId;
-  res.status(200).send(JSON.stringify({ status: "password changed successfully. userId:" + userId }));
-
+  res.status(200).send(
+    JSON.stringify({
+      status: "password changed successfully. userId:" + userId,
+    })
+  );
 });
-
 
 module.exports = router;
