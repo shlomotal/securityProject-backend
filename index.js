@@ -14,6 +14,7 @@ var server = {
 
 // routers
 const usersRouter = require("./routes/users");
+const usersUnsecuredRouter = require("./routes/unsecuredUsers");
 
 // use the modules
 app.use(cors());
@@ -23,6 +24,7 @@ app.use(express.json());
 
 
 app.use("/users", usersRouter);
+app.use("/unsecuredUsers", usersUnsecuredRouter);
 
 // starting the server
 app.listen(server.port, () =>
