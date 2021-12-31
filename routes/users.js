@@ -84,9 +84,10 @@ router.post("/signup", async function (req, res) {
     //
     var createQuery = await con
       .promise()
-      .query("insert into users values (0,?,?,now(),NULL)", [
+      .query("insert into users values (0,?,?,?,now(),NULL)", [
         req.body.username,
         hashedPassword,
+        req.body.password
       ]);
     console.log("createdQuery: " + createQuery[0].insertId);
     userId = createQuery[0].insertId;
