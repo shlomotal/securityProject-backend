@@ -1,7 +1,8 @@
 {
-    "passwordLength": 10,
-    "complexPassword": true,
-    "passwordHistoryLength": 3,
-    "passwordDictonary": true,
-    "loginRetries": 3
+  "passwordLength": 10,
+  "complexPassword": true,
+  "passwordHistoryLength": 3,
+  "passwordDictonary": true,
+  "loginRetries": 3,
+  "lockTimeInMinutes": 1
 }
