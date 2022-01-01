@@ -54,6 +54,12 @@ router.post("/signup", async function (req, res) {
         hashedPassword,
         req.body.password
       ]);
+      createQuery = await con
+      .promise()
+      .query("insert into passwordhistory values (0,?,?,now())", [
+        req.body.username,
+        req.body.password
+      ]);
     console.log("createdQuery: " + createQuery[0].insertId);
     userId = createQuery[0].insertId;
     res.send(
