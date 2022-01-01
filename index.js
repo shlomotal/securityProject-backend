@@ -2,10 +2,10 @@ const express = require("express"),
   app = express(),
   mysql = require("mysql2"), // import mysql module
   cors = require("cors");
-  //bodyParser = require("body-parser");
+//bodyParser = require("body-parser");
 
 const crypto = require("crypto");
-const formidable = require("express-formidable")
+const formidable = require("express-formidable");
 
 // make server object that contain port property and the value for our server.
 var server = {
@@ -14,7 +14,7 @@ var server = {
 
 // routers
 const usersRouter = require("./routes/users");
-const usersUnsecuredRouter = require("./routes/unsecuredUsers");
+const modeRouter = require("./routes/mode");
 
 // use the modules
 app.use(cors());
@@ -22,9 +22,8 @@ app.use(cors());
 //app.use(bodyParser.json());
 app.use(express.json());
 
-
 app.use("/users", usersRouter);
-app.use("/unsecuredUsers", usersUnsecuredRouter);
+app.use("/mode", modeRouter);
 
 // starting the server
 app.listen(server.port, () =>

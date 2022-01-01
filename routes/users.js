@@ -60,8 +60,8 @@ router.post("/signup", async function (req, res) {
         error: "Email is not valid",
       })
     );
-      con.end();
-      return false;
+    con.end();
+    return false;
   }
 
   responseExist = await con
@@ -124,10 +124,12 @@ router.post("/signup", async function (req, res) {
   );
   console.log("insert into failed_logins: " + insertIntoFailedLogins);
   //update history table
-  var createHistoryQuery = await con.promise().query("insert into passwordhistory values (0,?,?,now())", [
-    req.body.username,
-    req.body.password
-  ]);
+  var createHistoryQuery = await con
+    .promise()
+    .query("insert into passwordhistory values (0,?,?,now())", [
+      req.body.username,
+      req.body.password,
+    ]);
 });
 
 //LOGIN
@@ -141,8 +143,8 @@ router.post("/login", async (req, res) => {
         error: "Email is not valid",
       })
     );
-      con.end();
-      return false;
+    con.end();
+    return false;
   }
 
   //CHECK IF USER EXISTS
@@ -160,22 +162,27 @@ router.post("/login", async (req, res) => {
   }
   responsePassword = await con
     .promise()
-    .query("select password from users where username=?", [req.body.username]);
+    .query("select Uncsecuredpassword from users where username=?", [
+      req.body.username,
+    ]);
 
   //CHECK IF PASSWORD IS CORRECT
-  console.log("responsePassword: ", responsePassword[0][0].password);
+  console.log("responsePassword: ", responsePassword[0][0].Uncsecuredpassword);
   console.log("req.body.password: ", req.body.password);
   const validPass = await bcrypt.compare(
-    req.body.password,
+    req.body.oldPassword,
     responsePassword[0][0].password
   );
+
   userId = await con
     .promise()
     .query("select id from users where username=?", [req.body.username]);
   console.log("user id: ", userId[0][0].id);
 
   if (!validPass) {
-    failedLogins(userId[0][0].id);
+    if (config.get("loginRetries") != 0) {
+      failedLogins(userId[0][0].id);
+    }
 
     res
       .status(400)
@@ -185,37 +192,40 @@ router.post("/login", async (req, res) => {
   }
 
   // checking if the user is locked
-  var dateLock = await con
-    .promise()
-    .query("SELECT dateLock FROM `failed_logins` WHERE `userId`=? LIMIT 1", [
-      userId[0][0].id,
-    ]);
-  console.log("*** checking dateLock: ", Object.values(dateLock[0][0])[0]);
-  if (Object.values(dateLock[0][0])[0]) {
-    var isTimePassed = await con
+  if (config.get("loginRetries") != 0) {
+    var dateLock = await con
       .promise()
-      .query(
-        "SELECT count(*) from failed_logins T where TIMESTAMPDIFF(MINUTE, T.dateLock, now()) > ? and userId = ?",
-        [config.get("lockTimeInMinutes"), userId[0][0].id]
-      );
-    console.log("isTimePassed: ", Object.values(isTimePassed[0][0])[0]);
-    if (Object.values(isTimePassed[0][0])[0] == 0) {
-      console.log("user locked");
-      res.status(400).send(JSON.stringify({ error: "User locked" }));
-      con.end();
-      return false;
-    } else {
-      // update failed logins table
-      console.log("updading failed logins table");
-      var updateFailedLogins = await con
+      .query("SELECT dateLock FROM `failed_logins` WHERE `userId`=? LIMIT 1", [
+        userId[0][0].id,
+      ]);
+    console.log("*** checking dateLock: ", Object.values(dateLock[0][0])[0]);
+    if (Object.values(dateLock[0][0])[0]) {
+      var isTimePassed = await con
         .promise()
         .query(
-          "update failed_logins set failsCount=0, lastFail=null, dateLock=null where userId=?",
-          [userId[0][0].id]
+          "SELECT count(*) from failed_logins T where TIMESTAMPDIFF(MINUTE, T.dateLock, now()) > ? and userId = ?",
+          [config.get("lockTimeInMinutes"), userId[0][0].id]
         );
-      console.log("updated: ", updateFailedLogins);
+      console.log("isTimePassed: ", Object.values(isTimePassed[0][0])[0]);
+      if (Object.values(isTimePassed[0][0])[0] == 0) {
+        console.log("user locked");
+        res.status(400).send(JSON.stringify({ error: "User locked" }));
+        con.end();
+        return false;
+      } else {
+        // update failed logins table
+        console.log("updading failed logins table");
+        var updateFailedLogins = await con
+          .promise()
+          .query(
+            "update failed_logins set failsCount=0, lastFail=null, dateLock=null where userId=?",
+            [userId[0][0].id]
+          );
+        console.log("updated: ", updateFailedLogins);
+      }
     }
   }
+
   //update last login
   await con
     .promise()
@@ -242,8 +252,8 @@ router.post("/changePass", async function (req, res) {
         error: "Email is not valid",
       })
     );
-      con.end();
-      return false;
+    con.end();
+    return false;
   }
   var errors = [];
   responseUsername = await con
@@ -282,7 +292,9 @@ router.post("/changePass", async function (req, res) {
 
   console.log("valid password: " + validPass);
   if (!validPass) {
-    failedLogins(userId[0][0].id);
+    if (config.get("loginRetries") != 0) {
+      failedLogins(userId[0][0].id);
+    }
 
     res
       .status(400)
@@ -323,12 +335,17 @@ router.post("/changePass", async function (req, res) {
       errors.push("Password in dictonary_passwords");
     }
   }
-
-  if(await isNewPasswordTheSameOfOtherLasPassowrd(req.body.newPassword, req.body.username)){
-    console.log("Choose a password that you didn't chose before");
-    errors.push("Choose a password that you didn't chose before");
+  if (config.get("passwordHistoryLength") != 0) {
+    if (
+      await isNewPasswordTheSameOfOtherLasPassowrd(
+        req.body.newPassword,
+        req.body.username
+      )
+    ) {
+      console.log("Choose a password that you didn't chose before");
+      errors.push("Choose a password that you didn't chose before");
+    }
   }
-
   if (errors.length !== 0) {
     res.status(400).send(JSON.stringify({ error: "Incorrect Password" }));
     con.end();
@@ -339,14 +356,18 @@ router.post("/changePass", async function (req, res) {
   console.log("salt: " + salt);
   const hashedPassword = await bcrypt.hash(req.body.newPassword, salt);
   console.log("hashedPassword: " + hashedPassword);
-  var createQuery = await con.promise().query("UPDATE users SET password=?, Uncsecuredpassword = ?  WHERE username=?", [
-    hashedPassword,
-    req.body.newPassword,
-    req.body.username]);
-    createQuery = await con.promise().query("insert into passwordhistory values (0,?,?,now())", [
-    req.body.username,
-    req.body.newPassword
-  ]);
+  var createQuery = await con
+    .promise()
+    .query(
+      "UPDATE users SET password=?, Uncsecuredpassword = ?  WHERE username=?",
+      [hashedPassword, req.body.newPassword, req.body.username]
+    );
+  createQuery = await con
+    .promise()
+    .query("insert into passwordhistory values (0,?,?,now())", [
+      req.body.username,
+      req.body.newPassword,
+    ]);
   console.log("createdQuery: " + createQuery[0].insertId);
   userId = createQuery[0].insertId;
   res.status(200).send(
@@ -402,18 +423,19 @@ async function failedLogins(userId) {
 }
 
 // function to check if new password is the same like "n" last passwords
-async function isNewPasswordTheSameOfOtherLasPassowrd(i_Password, i_Username){
+async function isNewPasswordTheSameOfOtherLasPassowrd(i_Password, i_Username) {
   var con = general.getConn();
   isPasswordInDictonaryPasswordsDb = await con
-  .promise()
-  .query(
-    "select count(*) from (select * from passwordhistory where username = ? order by createdDate desc limit ?) as newTable where newTable.Uncsecuredpassword= ? ",[i_Username,config.get("passwordHistoryLength"),i_Password]); 
-    console.log(config.get("passwordHistoryLength"));
-    console.log(i_Password);
-    console.log(i_Username);
-    con.end();
-    return (Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0] > 0);
+    .promise()
+    .query(
+      "select count(*) from (select * from passwordhistory where username = ? order by createdDate desc limit ?) as newTable where newTable.Uncsecuredpassword= ? ",
+      [i_Username, config.get("passwordHistoryLength"), i_Password]
+    );
+  console.log(config.get("passwordHistoryLength"));
+  console.log(i_Password);
+  console.log(i_Username);
+  con.end();
+  return Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0] > 0;
 }
-  
-  
+
 module.exports = router;
