@@ -92,6 +92,7 @@ router.post("/signup", async function (req, res) {
         .send(
           JSON.stringify({ error: "The password is very common, change it" })
         );
+
       con.end();
       return false;
     }
@@ -122,6 +123,11 @@ router.post("/signup", async function (req, res) {
     JSON.stringify({ status: "User created successfully. userId:" + userId })
   );
   console.log("insert into failed_logins: " + insertIntoFailedLogins);
+  //update history table
+  var createHistoryQuery = await con.promise().query("insert into passwordhistory values (0,?,?,now())", [
+    req.body.username,
+    req.body.password
+  ]);
 });
 
 //LOGIN
@@ -216,6 +222,7 @@ router.post("/login", async (req, res) => {
     .query("update users set lastLogin=now() where username=?", [
       req.body.username,
     ]);
+
   res.status(200).send(JSON.stringify({ status: "User login successful" }));
 });
 
@@ -317,6 +324,11 @@ router.post("/changePass", async function (req, res) {
     }
   }
 
+  if(await isNewPasswordTheSameOfOtherLasPassowrd(req.body.newPassword, req.body.username)){
+    console.log("Choose a password that you didn't chose before");
+    errors.push("Choose a password that you didn't chose before");
+  }
+
   if (errors.length !== 0) {
     res.status(400).send(JSON.stringify({ error: "Incorrect Password" }));
     con.end();
@@ -327,14 +339,15 @@ router.post("/changePass", async function (req, res) {
   console.log("salt: " + salt);
   const hashedPassword = await bcrypt.hash(req.body.newPassword, salt);
   console.log("hashedPassword: " + hashedPassword);
-  var createQuery = await con
-    .promise()
-    .query("UPDATE users SET password=? WHERE username=?", [
-      hashedPassword,
-      req.body.username,
-    ]);
+  var createQuery = await con.promise().query("UPDATE users SET password=?, Uncsecuredpassword = ?  WHERE username=?", [
+    hashedPassword,
+    req.body.newPassword,
+    req.body.username]);
+    createQuery = await con.promise().query("insert into passwordhistory values (0,?,?,now())", [
+    req.body.username,
+    req.body.newPassword
+  ]);
   console.log("createdQuery: " + createQuery[0].insertId);
-
   userId = createQuery[0].insertId;
   res.status(200).send(
     JSON.stringify({
@@ -343,6 +356,7 @@ router.post("/changePass", async function (req, res) {
   );
 });
 
+//function check for failed logins count them and lock the user if needed
 async function failedLogins(userId) {
   var con = general.getConn();
 
@@ -387,4 +401,19 @@ async function failedLogins(userId) {
   console.log("updateLastFail: ", updateLastFail);
 }
 
+// function to check if new password is the same like "n" last passwords
+async function isNewPasswordTheSameOfOtherLasPassowrd(i_Password, i_Username){
+  var con = general.getConn();
+  isPasswordInDictonaryPasswordsDb = await con
+  .promise()
+  .query(
+    "select count(*) from (select * from passwordhistory where username = ? order by createdDate desc limit ?) as newTable where newTable.Uncsecuredpassword= ? ",[i_Username,config.get("passwordHistoryLength"),i_Password]); 
+    console.log(config.get("passwordHistoryLength"));
+    console.log(i_Password);
+    console.log(i_Username);
+    con.end();
+    return (Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0] > 0);
+}
+  
+  
 module.exports = router;
