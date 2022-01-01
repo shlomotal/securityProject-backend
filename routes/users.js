@@ -5,6 +5,10 @@ const config = require("config");
 const match = require("nodemon/lib/monitor/match");
 const general = require("../modules/general");
 
+const validEmailRegex = RegExp(
+  /^(([^<>()\[\]\.,;:\s@\"]+(\.[^<>()\[\]\.,;:\s@\"]+)*)|(\".+\"))@(([^<>()[\]\.,;:\s@\"]+\.)+[^<>()[\]\.,;:\s@\"]{2,})$/i
+);
+
 // get user lists
 router.get("/getAll", async function (req, res) {
   var con = general.getConn();
@@ -24,7 +28,6 @@ router.post("/signup", async function (req, res) {
       config.get("passwordLength") +
       ",})"
   );
-  var errors = [];
   var con = general.getConn();
   console.log(
     "req: " + req.body.username,
@@ -35,7 +38,7 @@ router.post("/signup", async function (req, res) {
     if (!strongRegex.test(req.body.password)) {
       res.status(400).send(
         JSON.stringify({
-          error: "You chose complex password and its to weak",
+          error: "Password is too weak",
         })
       );
       return false;
@@ -44,77 +47,97 @@ router.post("/signup", async function (req, res) {
   }
   if (req.body.confirmPassword !== req.body.password) {
     console.log("Passwords do not match");
-    errors.push("Passwords do not match");
+    res.status(400).send(
+      JSON.stringify({
+        error: "Passwords do not match",
+      })
+    );
   }
-  if (errors.length === 0) {
-    responseExist = await con
+  if (!validEmailRegex.test(req.body.username)) {
+    console.log("Email is not valid");
+    res.status(400).send(
+      JSON.stringify({
+        error: "Email is not valid",
+      })
+    );
+      con.end();
+      return false;
+  }
+
+  responseExist = await con
+    .promise()
+    .query("select count(*) as cnt from users where username=?", [
+      req.body.username,
+    ]);
+  console.log("exist: ", responseExist[0][0].cnt);
+  if (responseExist[0][0].cnt !== 0) {
+    res.send(JSON.stringify({ error: "The username already exists" }));
+    con.end();
+    return false;
+  }
+  if (config.get("passwordDictonary")) {
+    isPasswordInDictonaryPasswordsDb = await con
       .promise()
-      .query("select count(*) as cnt from users where username=?", [
-        req.body.username,
-      ]);
-    console.log("exist: ", responseExist[0][0].cnt);
-    if (responseExist[0][0].cnt !== 0) {
-      res.send(JSON.stringify({ error: "The username already exists" }));
+      .query(
+        "SELECT EXISTS(SELECT 1 FROM `dictonary_passwords` WHERE `password`=? LIMIT 1)",
+        [req.body.confirmPassword]
+      );
+    console.log(
+      "isPasswordInDictonaryPasswordsDb2: ",
+      Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0]
+    );
+    if (Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0] == 1) {
+      res
+        .status(400)
+        .send(
+          JSON.stringify({ error: "The password is very common, change it" })
+        );
       con.end();
       return false;
     }
-    if (config.get("passwordDictonary")) {
-      isPasswordInDictonaryPasswordsDb = await con
-        .promise()
-        .query(
-          "SELECT EXISTS(SELECT 1 FROM `dictonary_passwords` WHERE `password`=? LIMIT 1)",
-          [req.body.confirmPassword]
-        );
-      console.log(
-        "isPasswordInDictonaryPasswordsDb2: ",
-        Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0]
-      );
-      if (Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0] == 1) {
-        res
-          .status(400)
-          .send(
-            JSON.stringify({ error: "The password is very common, change it" })
-          );
-        con.end();
-        return false;
-      }
-    }
-
-    //HASH PASSWORD
-    const salt = await bcrypt.genSalt(10);
-    console.log("salt: " + salt);
-    const hashedPassword = await bcrypt.hash(req.body.password, salt);
-    console.log("hashedPassword: " + hashedPassword);
-    //
-    var createQuery = await con
-      .promise()
-      .query("insert into users values (0,?,?,?,now(),NULL)", [
-        req.body.username,
-        hashedPassword,
-        req.body.password
-      ]);
-    console.log("createdQuery: " + createQuery[0].insertId);
-    userId = createQuery[0].insertId;
-
-    var insertIntoFailedLogins = await con
-      .promise()
-      .query("insert into failed_logins (userId, failsCount) values (?,0)", [
-        userId,
-      ]);
-    res.send(
-      JSON.stringify({ status: "User created successfully. userId:" + userId })
-    );
-    console.log("insert into failed_logins: " + insertIntoFailedLogins);
   }
+
+  //HASH PASSWORD
+  const salt = await bcrypt.genSalt(10);
+  console.log("salt: " + salt);
+  const hashedPassword = await bcrypt.hash(req.body.password, salt);
+  console.log("hashedPassword: " + hashedPassword);
+  //
+  var createQuery = await con
+    .promise()
+    .query("insert into users values (0,?,?,?,now(),NULL)", [
+      req.body.username,
+      hashedPassword,
+      req.body.password,
+    ]);
+  console.log("createdQuery: " + createQuery[0].insertId);
+  userId = createQuery[0].insertId;
+
+  var insertIntoFailedLogins = await con
+    .promise()
+    .query("insert into failed_logins (userId, failsCount) values (?,0)", [
+      userId,
+    ]);
+  res.send(
+    JSON.stringify({ status: "User created successfully. userId:" + userId })
+  );
+  console.log("insert into failed_logins: " + insertIntoFailedLogins);
 });
 
 //LOGIN
 router.post("/login", async (req, res) => {
   var con = general.getConn();
 
-  // VALIDATE DATA BEFORE WE MAKE A USER
-  //const { error } = loginValidation(req.body);
-  //if (error) return res.status(400).send(error.details[0].message);
+  if (!validEmailRegex.test(req.body.username)) {
+    console.log("Email is not valid");
+    res.status(400).send(
+      JSON.stringify({
+        error: "Email is not valid",
+      })
+    );
+      con.end();
+      return false;
+  }
 
   //CHECK IF USER EXISTS
   responseExist = await con
@@ -205,6 +228,16 @@ router.post("/changePass", async function (req, res) {
       ",})"
   );
   var con = general.getConn();
+  if (!validEmailRegex.test(req.body.username)) {
+    console.log("Email is not valid");
+    res.status(400).send(
+      JSON.stringify({
+        error: "Email is not valid",
+      })
+    );
+      con.end();
+      return false;
+  }
   var errors = [];
   responseUsername = await con
     .promise()
