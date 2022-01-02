@@ -141,6 +141,8 @@ router.post("/signup", async function (req, res) {
 router.post("/login", async (req, res) => {
   var con = general.getConn();
   var validPass = false;
+  console.log(req.body.username);
+  console.log(req.body.password);
   if (!validEmailRegex.test(req.body.username)) {
     console.log("Email is not valid");
     res.status(400).send(
@@ -181,15 +183,14 @@ router.post("/login", async (req, res) => {
 
   //Check if password is correct for UNSECURED sit (SQL Injection)
   else{
-    console.log('unsecured function');
     USERNAME = req.body.username;
     PASSWORD = req.body.password;
     responseFromDbSqlInjection = await con
     .promise()
-    .query('SELECT * FROM Users WHERE username = "' + USERNAME + '" AND password = "' + PASSWORD + '";');
-    //res.status(200).send(JSON.stringify({responseFromDbSqlInjection}));
-    console.log(responseFromDbSqlInjection);
-    validPass = true;
+    .query("SELECT count(*) FROM users WHERE username = '" + USERNAME + "' AND Uncsecuredpassword = '" + PASSWORD + "' LIMIT 1;");
+    if(Object.values(responseFromDbSqlInjection[0][0])[0] != 0){
+      validPass = true;
+    }
   }
 
   userId = await con
