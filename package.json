@@ -14,6 +14,7 @@
     "body-parser": "^1.19.0",
     "config": "^3.3.6",
     "cors": "^2.8.5",
+    "crypto": "^1.0.1",
     "edit-json-file": "^1.7.0",
     "express": "^4.17.1",
     "express-formidable": "^1.2.0",
@@ -21,6 +22,8 @@
     "json": "^11.0.0",
     "mysql": "^2.18.1",
     "mysql2": "^2.3.3",
-    "nodemon": "^2.0.15"
+    "nodemailer": "^6.7.2",
+    "nodemon": "^2.0.15",
+    "save": "^2.4.0"
   }
 }

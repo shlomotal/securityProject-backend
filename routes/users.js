@@ -4,6 +4,8 @@ const bcrypt = require("bcryptjs");
 const config = require("config");
 const match = require("nodemon/lib/monitor/match");
 const general = require("../modules/general");
+const nodemailer = require("nodemailer");
+const crypto = require("crypto");
 
 const validEmailRegex = RegExp(
   /^(([^<>()\[\]\.,;:\s@\"]+(\.[^<>()\[\]\.,;:\s@\"]+)*)|(\".+\"))@(([^<>()[\]\.,;:\s@\"]+\.)+[^<>()[\]\.,;:\s@\"]{2,})$/i
@@ -453,5 +455,215 @@ async function isNewPasswordTheSameOfOtherLasPassowrd(i_Password, i_Username) {
   con.end();
   return Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0] > 0;
 }
+//send email
+function sendEmail(email, token) {
+  var email = email;
+  var token = token;
+  var mail = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: "projectsemailnew@gmail.com", // Your email id
+      pass: "projects2021", // Your password
+    },
+  });
+  var mailOptions = {
+    from: "Comunication_LTD@gmail.com",
+    to: email,
+    subject: "Reset Password Link - Comunication_LTD.com",
+    html:
+      '<p>Your reset pin is: "' +
+      token +
+      '" . Please copy that and past in the reset password page.</p>',
+    //html: '<p>You requested for reset password, kindly use this <a href="http://localhost:4000/reset-password?token=' + token + '">link</a> to reset your password</p>'
+  };
+  mail.sendMail(mailOptions, function (error, info) {
+    if (error) {
+      console.log("There is any problem");
+    } else {
+      console.log("the email sent succefully");
+      res.status(200).send(JSON.stringify({ status: "User login successful" }));
+    }
+  });
+}
+
+router.post("/reset-password-email", function (req, res, next) {
+  var con = general.getConn();
+  var email = req.body.username;
+  con.query(
+    'SELECT username FROM users WHERE username ="' + email + '"',
+    function (err, result) {
+      if (err) throw err;
+      var type = "";
+      var msg = "";
+      console.log(result);
+      console.log(result.length);
+      console.log(email);
+      if (result.length !== 0) {
+        var current_date = new Date().valueOf().toString();
+        var token = crypto
+          .createHash("sha1")
+          .update(current_date, "uft-8")
+          .digest("hex");
+        var sent = sendEmail(email, token);
+        if (sent != "0") {
+          var data = {
+            token: token,
+          };
+          con.query(
+            'UPDATE users SET ? WHERE username ="' + email + '"',
+            data,
+            function (err, result) {
+              if (err) throw err;
+            }
+          );
+          type = "success";
+          msg = "The reset password link has been sent to your email address";
+          res.status(200).send(
+            JSON.stringify({
+              status:
+                "The reset password link has been sent to your email address",
+            })
+          );
+          return true;
+        } else {
+          type = "error";
+          msg = "Something goes to wrong. Please try again";
+          console.log("res0");
+          res
+            .status(400)
+            .send(JSON.stringify({ status: "Something goes to much wrong." }));
+          return false;
+        }
+      } else {
+        console.log("The email did not sent ");
+        type = "error";
+        msg = "The Email is not registered with us";
+        console.log("res1");
+        res
+          .status(400)
+          .send(JSON.stringify({ status: "Something goes wrong." }));
+        return false;
+      }
+      //req.flash(type, msg);
+    }
+  );
+});
+
+/* update password to database */
+router.post("/update-password", function (req, res, next) {
+  var con = general.getConn();
+  var token = req.body.token;
+  var password = req.body.password;
+  var confirmNewPassword = req.body.confirmNewPassword;
+  var complexPassword = config.get("complexPassword");
+  var strongRegex = new RegExp(
+    "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])(?=.{" +
+      config.get("passwordLength") +
+      ",})"
+  );
+  var errors = [];
+
+  console.log(password);
+  console.log(confirmNewPassword);
+  if (password !== confirmNewPassword) {
+    console.log("Passwords do not match");
+    errors.push("Passwords do not match");
+  }
+
+  if (complexPassword) {
+    if (!strongRegex.test(req.body.password)) {
+      res.status(400).send(
+        JSON.stringify({
+          error: "You chose simple password and its to weak",
+        })
+      );
+      return false;
+    }
+    console.log("Great! its complex password");
+  }
+
+  console.log(config.get("passwordDictonary"));
+  if (config.get("passwordDictonary")) {
+    con.query(
+      'SELECT EXISTS(SELECT 1 FROM `dictonary_passwords` WHERE `password`="' +
+        req.body.confirmNewPassword +
+        '")',
+      function (err, result) {
+        if (err) throw err;
+        console.log(result);
+        console.log("result: ", Object.values(result[0])[0]);
+        if (Object.values(result[0])[0] == 1) {
+          console.log("Password in dictonary_passwords");
+          errors.push("Password in dictonary_passwords");
+          res.status(400).send(JSON.stringify({ error: "Password in dictonary" }));
+          return false;
+        }
+        else
+        {
+          console.log("errors : " + errors.length);
+          if (errors.length !== 0) {
+            res.status(400).send(JSON.stringify({ error: "Incorrect Password" }));
+            con.end();
+            return false;
+          }
+          else
+          {
+            con.query(
+              'SELECT * FROM users WHERE token ="' + token + '"',
+              function (err, result) {
+                if (err) throw err;
+                var type;
+                var msg;
+                if (result[0]) {
+                  var saltRounds = 10;
+                  // var hash = bcrypt.hash(password, saltRounds);
+                  bcrypt.genSalt(saltRounds, function (err, salt) {
+                    bcrypt.hash(password, salt, function (err, hash) {
+                      var data = {
+                        password: hash,
+                        Uncsecuredpassword: password
+                      };
+                      con.query(
+                        'UPDATE users SET ? WHERE username ="' + result[0].username + '"',
+                        data,
+                        function (err, result) {
+                          if (err) throw err;
+                        }
+                      );
+                    });
+                    console.log("Your password has been updated successfully");
+                    res
+                      .status(200)
+                      .send(
+                        JSON.stringify({ status: "Reset password has updated successful" })
+                      );
+                    return true;
+                  });
+                } else {
+                  console.log("Did not work");
+                  type = "success";
+                  msg = "Invalid link; please try again";
+                  res
+                    .status(400)
+                    .send(JSON.stringify({ status: "Reset password was not sent" }));
+          
+                  return false;
+                }
+                //req.flash(type, msg);
+              }
+            );
+          }
+        }
+      }
+    );
+  }
+
+  
+
+  console.log(token);
+  console.log(password);
+
+  
+});
 
 module.exports = router;
