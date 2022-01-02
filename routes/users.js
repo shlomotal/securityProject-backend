@@ -138,7 +138,7 @@ router.post("/signup", async function (req, res) {
 //LOGIN
 router.post("/login", async (req, res) => {
   var con = general.getConn();
-
+  var validPass = false;
   if (!validEmailRegex.test(req.body.username)) {
     console.log("Email is not valid");
     res.status(400).send(
@@ -167,13 +167,28 @@ router.post("/login", async (req, res) => {
     .promise()
     .query("select password from users where username=?", [req.body.username]);
 
-  //CHECK IF PASSWORD IS CORRECT
-  console.log("responsePassword: ", responsePassword[0][0].password);
-  console.log("req.body.password: ", req.body.password);
-  const validPass = await bcrypt.compare(
-    req.body.password,
-    responsePassword[0][0].password
-  );
+  //CHECK IF PASSWORD IS CORRECT for secured site
+  if (config.get("isSecured")){
+    console.log("responsePassword: ", responsePassword[0][0].password);
+    console.log("req.body.password: ", req.body.password);
+    validPass = await bcrypt.compare(
+      req.body.password,
+      responsePassword[0][0].password
+    );
+  }
+
+  //Check if password is correct for UNSECURED sit (SQL Injection)
+  else{
+    console.log('unsecured function');
+    USERNAME = req.body.username;
+    PASSWORD = req.body.password;
+    responseFromDbSqlInjection = await con
+    .promise()
+    .query('SELECT * FROM Users WHERE username = "' + USERNAME + '" AND password = "' + PASSWORD + '";');
+    //res.status(200).send(JSON.stringify({responseFromDbSqlInjection}));
+    console.log(responseFromDbSqlInjection);
+    validPass = true;
+  }
 
   userId = await con
     .promise()
