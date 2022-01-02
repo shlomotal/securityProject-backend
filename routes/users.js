@@ -41,6 +41,7 @@ router.post("/signup", async function (req, res) {
           error: "Password is too weak",
         })
       );
+      con.end();
       return false;
     }
     console.log("Great! its complex password");
@@ -52,6 +53,8 @@ router.post("/signup", async function (req, res) {
         error: "Passwords do not match",
       })
     );
+    con.end();
+    return false;
   }
   if (!validEmailRegex.test(req.body.username)) {
     console.log("Email is not valid");
@@ -162,15 +165,13 @@ router.post("/login", async (req, res) => {
   }
   responsePassword = await con
     .promise()
-    .query("select Uncsecuredpassword from users where username=?", [
-      req.body.username,
-    ]);
+    .query("select password from users where username=?", [req.body.username]);
 
   //CHECK IF PASSWORD IS CORRECT
-  console.log("responsePassword: ", responsePassword[0][0].Uncsecuredpassword);
+  console.log("responsePassword: ", responsePassword[0][0].password);
   console.log("req.body.password: ", req.body.password);
   const validPass = await bcrypt.compare(
-    req.body.oldPassword,
+    req.body.password,
     responsePassword[0][0].password
   );
 
