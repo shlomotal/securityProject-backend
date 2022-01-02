@@ -1,5 +1,5 @@
 {
-"isSecured":true,
+"isSecured":false,
 "passwordLength": 10,
 "complexPassword": true,
 "passwordHistoryLength": 3,
