@@ -667,4 +667,41 @@ router.post("/update-password", function (req, res, next) {
   
 });
 
+//insert new client to DB
+router.post("/addClient", async function (req, res, next) {
+  var con = general.getConn();
+  var clientFirstName = req.body.clientFirstName;
+  var clientLastName = req.body.clientLastName;
+  var clientPhoneNumber = req.body.clientPhoneNumber;
+  var address = req.body.address;
+  var QueryCheckForPhoneNumber =await con.promise().query("select count(*) from Clients where phoneNumber = '"+clientPhoneNumber+"'");
+  if (Object.values(QueryCheckForPhoneNumber[0][0])[0] === 0){
+    var createQuery = await con
+    .promise()
+    .query("insert into Clients values (0,?,?,?,?,now())", [
+      clientFirstName,
+      clientLastName,
+      clientPhoneNumber,
+      address
+    ]);  
+    var Query =await con.promise().query("select * from Clients where clientFirstName = '"+clientFirstName+"'");
+    res.status(200).send(
+      JSON.stringify({
+        message: Query[0][0],
+      })
+    );
+  }
+  else{
+    res.status(400).send(
+      JSON.stringify({
+        Error: "The client already exist, try another phone number",
+      })
+    );
+  }
+  
+    con.end();
+    return false;
+});
+
+
 module.exports = router;
