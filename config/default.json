@@ -1,9 +1,9 @@
 {
-"isSecured":false,
-"passwordLength": 10,
-"complexPassword": true,
-"passwordHistoryLength": 3,
-"passwordDictonary": true,
-"loginRetries": 5,
-"lockTimeInMinutes": 5
+"isSecured": false,
+"passwordLength": 0,
+"complexPassword": false,
+"passwordHistoryLength": 0,
+"passwordDictonary": false,
+"loginRetries": 0,
+"lockTimeInMinutes": 0
 }
