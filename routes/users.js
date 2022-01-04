@@ -141,8 +141,6 @@ router.post("/signup", async function (req, res) {
 router.post("/login", async (req, res) => {
   var con = general.getConn();
   var validPass = false;
-  console.log(req.body.username);
-  console.log(req.body.password);
   if (!validEmailRegex.test(req.body.username)) {
     console.log("Email is not valid");
     res.status(400).send(
@@ -172,7 +170,7 @@ router.post("/login", async (req, res) => {
     .query("select password from users where username=?", [req.body.username]);
 
   //CHECK IF PASSWORD IS CORRECT for secured site
-  if (config.get("isSecured")){
+  if (config.get("isSecured")) {
     console.log("responsePassword: ", responsePassword[0][0].password);
     console.log("req.body.password: ", req.body.password);
     validPass = await bcrypt.compare(
@@ -182,15 +180,22 @@ router.post("/login", async (req, res) => {
   }
 
   //Check if password is correct for UNSECURED sit (SQL Injection)
-  else{
+  else {
+    console.log("unsecured function");
     USERNAME = req.body.username;
     PASSWORD = req.body.password;
     responseFromDbSqlInjection = await con
-    .promise()
-    .query("SELECT count(*) FROM users WHERE username = '" + USERNAME + "' AND Uncsecuredpassword = '" + PASSWORD + "' LIMIT 1;");
-    if(Object.values(responseFromDbSqlInjection[0][0])[0] != 0){
-      validPass = true;
-    }
+      .promise()
+      .query(
+        'SELECT * FROM Users WHERE username = "' +
+          USERNAME +
+          '" AND password = "' +
+          PASSWORD +
+          '";'
+      );
+    //res.status(200).send(JSON.stringify({responseFromDbSqlInjection}));
+    console.log(responseFromDbSqlInjection);
+    validPass = true;
   }
 
   userId = await con
@@ -505,36 +510,48 @@ router.post("/reset-password-email", function (req, res, next) {
           .createHash("sha1")
           .update(current_date, "uft-8")
           .digest("hex");
-        var sent = sendEmail(email, token);
-        if (sent != "0") {
-          var data = {
-            token: token,
-          };
-          con.query(
-            'UPDATE users SET ? WHERE username ="' + email + '"',
-            data,
-            function (err, result) {
-              if (err) throw err;
+        var saltRounds = 10;
+        ///==========================================================================================================>
+        bcrypt.genSalt(saltRounds, function (err, salt) {
+          bcrypt.hash(token, salt, function (err, hash) {
+            // Store hash in your password DB.
+            var sent = sendEmail(email, token);
+            console.log("The hash token is: " + hash);
+            if (sent != "0") {
+              var data = {
+                unsecuredToken: token,
+                token: hash,
+              };
+              con.query(
+                'UPDATE users SET ? WHERE username ="' + email + '"',
+                data,
+                function (err, result) {
+                  if (err) throw err;
+                }
+              );
+              type = "success";
+              msg =
+                "The reset password link has been sent to your email address";
+              res.status(200).send(
+                JSON.stringify({
+                  status:
+                    "The reset password link has been sent to your email address",
+                })
+              );
+              return true;
+            } else {
+              type = "error";
+              msg = "Something goes to wrong. Please try again";
+              console.log("res0");
+              res
+                .status(400)
+                .send(
+                  JSON.stringify({ status: "Something goes to much wrong." })
+                );
+              return false;
             }
-          );
-          type = "success";
-          msg = "The reset password link has been sent to your email address";
-          res.status(200).send(
-            JSON.stringify({
-              status:
-                "The reset password link has been sent to your email address",
-            })
-          );
-          return true;
-        } else {
-          type = "error";
-          msg = "Something goes to wrong. Please try again";
-          console.log("res0");
-          res
-            .status(400)
-            .send(JSON.stringify({ status: "Something goes to much wrong." }));
-          return false;
-        }
+          });
+        });
       } else {
         console.log("The email did not sent ");
         type = "error";
@@ -552,6 +569,7 @@ router.post("/reset-password-email", function (req, res, next) {
 
 /* update password to database */
 router.post("/update-password", function (req, res, next) {
+  var username = req.body.username
   var con = general.getConn();
   var token = req.body.token;
   var password = req.body.password;
@@ -563,7 +581,6 @@ router.post("/update-password", function (req, res, next) {
       ",})"
   );
   var errors = [];
-
   console.log(password);
   console.log(confirmNewPassword);
   if (password !== confirmNewPassword) {
@@ -591,63 +608,87 @@ router.post("/update-password", function (req, res, next) {
         '")',
       function (err, result) {
         if (err) throw err;
-        console.log(result);
+        console.log("result:" + Object.values(result[0]));
         console.log("result: ", Object.values(result[0])[0]);
         if (Object.values(result[0])[0] == 1) {
           console.log("Password in dictonary_passwords");
           errors.push("Password in dictonary_passwords");
-          res.status(400).send(JSON.stringify({ error: "Password in dictonary" }));
+          res
+            .status(400)
+            .send(JSON.stringify({ error: "Password in dictonary" }));
           return false;
-        }
-        else
-        {
+        } else {
           console.log("errors : " + errors.length);
           if (errors.length !== 0) {
-            res.status(400).send(JSON.stringify({ error: "Incorrect Password" }));
+            res
+              .status(400)
+              .send(JSON.stringify({ error: "Incorrect Password" }));
             con.end();
             return false;
-          }
-          else
-          {
+          } else {
             con.query(
-              'SELECT * FROM users WHERE token ="' + token + '"',
-              function (err, result) {
+              'SELECT * FROM users WHERE username ="' + username + '"',
+              async function (err, result) {
+                ///needs to add compre check between the hash token---------------------------------------------->
                 if (err) throw err;
                 var type;
                 var msg;
-                if (result[0]) {
-                  var saltRounds = 10;
-                  // var hash = bcrypt.hash(password, saltRounds);
-                  bcrypt.genSalt(saltRounds, function (err, salt) {
-                    bcrypt.hash(password, salt, function (err, hash) {
-                      var data = {
-                        password: hash,
-                        Uncsecuredpassword: password
-                      };
-                      con.query(
-                        'UPDATE users SET ? WHERE username ="' + result[0].username + '"',
-                        data,
-                        function (err, result) {
-                          if (err) throw err;
-                        }
+                if (result.length > 0) {
+                  console.log("The token is: " + token);
+                  //console.log("The unsecuredtoken is: " + result[0].unsecuredToken);
+                  var resenedToken = result[0].token;
+                  console.log(resenedToken);
+                  const validToken = await bcrypt.compare(token, resenedToken);
+                  console.log('validToken: ' + validToken);
+                  if (!validToken) {
+                    console.log("wrong token");
+                    type = "success";
+                    msg = "Invalid link; please try again";
+                    res.status(400).send(
+                      JSON.stringify({
+                        status: "Reset password was not happend",
+                      })
+                    );
+                  } else {
+                    var saltRounds = 10;
+                    // var hash = bcrypt.hash(password, saltRounds);
+                    bcrypt.genSalt(saltRounds, function (err, salt) {
+                      bcrypt.hash(password, salt, function (err, hash) {
+                        var data = {
+                          password: hash,
+                          Uncsecuredpassword: password,
+                        };
+                        con.query(
+                          'UPDATE users SET ? WHERE username ="' +
+                            result[0].username +
+                            '"',
+                          data,
+                          function (err, result) {
+                            if (err) throw err;
+                          }
+                        );
+                      });
+                      console.log(
+                        "Your password has been updated successfully"
                       );
+                      res.status(200).send(
+                        JSON.stringify({
+                          status: "Reset password has updated successful",
+                        })
+                      );
+                      return true;
                     });
-                    console.log("Your password has been updated successfully");
-                    res
-                      .status(200)
-                      .send(
-                        JSON.stringify({ status: "Reset password has updated successful" })
-                      );
-                    return true;
-                  });
+                  }
                 } else {
                   console.log("Did not work");
                   type = "success";
                   msg = "Invalid link; please try again";
                   res
                     .status(400)
-                    .send(JSON.stringify({ status: "Reset password was not sent" }));
-          
+                    .send(
+                      JSON.stringify({ status: "Reset password was not sent" })
+                    );
+
                   return false;
                 }
                 //req.flash(type, msg);
@@ -657,51 +698,54 @@ router.post("/update-password", function (req, res, next) {
         }
       }
     );
-  }
+  } else {
+    con.query(
+      'SELECT * FROM users WHERE unsecuredToken ="' + token + '"',
+      function (err, result) {
+        if (err) throw err;
+        var type;
+        var msg;
+        if (result.length > 0) {
+          var saltRounds = 10;
+          // var hash = bcrypt.hash(password, saltRounds);
+          bcrypt.genSalt(saltRounds, function (err, salt) {
+            bcrypt.hash(password, salt, function (err, hash) {
+              var data = {
+                password: hash,
+                Uncsecuredpassword: password,
+              };
+              con.query(
+                'UPDATE users SET ? WHERE username ="' +
+                  result[0].username +
+                  '"',
+                data,
+                function (err, result) {
+                  if (err) throw err;
+                }
+              );
+            });
+            console.log("Your password has been updated successfully");
+            res.status(200).send(
+              JSON.stringify({
+                status: "Reset password has updated successful",
+              })
+            );
+            return true;
+          });
+        } else {
+          console.log("Did not work");
+          type = "success";
+          msg = "Invalid link; please try again";
+          res
+            .status(400)
+            .send(JSON.stringify({ status: "Reset password was not sent" }));
 
-  
-
-  console.log(token);
-  console.log(password);
-
-  
-});
-
-//insert new client to DB
-router.post("/addClient", async function (req, res, next) {
-  var con = general.getConn();
-  var clientFirstName = req.body.clientFirstName;
-  var clientLastName = req.body.clientLastName;
-  var clientPhoneNumber = req.body.clientPhoneNumber;
-  var address = req.body.address;
-  var QueryCheckForPhoneNumber =await con.promise().query("select count(*) from Clients where phoneNumber = '"+clientPhoneNumber+"'");
-  if (Object.values(QueryCheckForPhoneNumber[0][0])[0] === 0){
-    var createQuery = await con
-    .promise()
-    .query("insert into Clients values (0,?,?,?,?,now())", [
-      clientFirstName,
-      clientLastName,
-      clientPhoneNumber,
-      address
-    ]);  
-    var Query =await con.promise().query("select * from Clients where clientFirstName = '"+clientFirstName+"'");
-    res.status(200).send(
-      JSON.stringify({
-        message: Query[0][0],
-      })
+          return false;
+        }
+        //req.flash(type, msg);
+      }
     );
   }
-  else{
-    res.status(400).send(
-      JSON.stringify({
-        Error: "The client already exist, try another phone number",
-      })
-    );
-  }
-  
-    con.end();
-    return false;
 });
-
 
 module.exports = router;
