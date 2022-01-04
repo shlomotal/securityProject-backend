@@ -111,7 +111,7 @@ router.post("/signup", async function (req, res) {
   //
   var createQuery = await con
     .promise()
-    .query("insert into users values (0,?,?,?,now(),NULL)", [
+    .query("insert into users values (0,?,?,?,now(),NULL, NULL, NULL)", [
       req.body.username,
       hashedPassword,
       req.body.password,
@@ -505,8 +505,8 @@ router.post("/reset-password-email", function (req, res, next) {
       if (err) throw err;
       var type = "";
       var msg = "";
-      console.log('debug result: ', result);
-      console.log('result len: ', result.length);
+      console.log("debug result: ", result);
+      console.log("result len: ", result.length);
       console.log(email);
       if (result.length !== 0) {
         var current_date = new Date().valueOf().toString();
@@ -572,7 +572,7 @@ router.post("/reset-password-email", function (req, res, next) {
 });
 /* update password to database */
 router.post("/update-password", function (req, res, next) {
-  var username = req.body.username
+  var username = req.body.username;
   var con = general.getConn();
   var token = req.body.token;
   var password = req.body.password;
@@ -642,7 +642,7 @@ router.post("/update-password", function (req, res, next) {
                   var resenedToken = result[0].token;
                   console.log(resenedToken);
                   const validToken = await bcrypt.compare(token, resenedToken);
-                  console.log('validToken: ' + validToken);
+                  console.log("validToken: " + validToken);
                   if (!validToken) {
                     console.log("wrong token");
                     type = "success";
@@ -751,53 +751,51 @@ router.post("/update-password", function (req, res, next) {
   }
 });
 
-  
-  //insert new client to DB
-  router.post("/addClient", async function (req, res, next) {
-    var con = general.getConn();
-    var clientFirstName = req.body.clientFirstName;
-    var clientLastName = req.body.clientLastName;
-    var clientPhoneNumber = req.body.clientPhoneNumber;
-    var address = req.body.address;
-    var QueryCheckForPhoneNumber = await con
-      .promise()
-      .query(
-        "select count(*) from Clients where phoneNumber = '" +
+//insert new client to DB
+router.post("/addClient", async function (req, res, next) {
+  var con = general.getConn();
+  var clientFirstName = req.body.clientFirstName;
+  var clientLastName = req.body.clientLastName;
+  var clientPhoneNumber = req.body.clientPhoneNumber;
+  var address = req.body.address;
+  var QueryCheckForPhoneNumber = await con
+    .promise()
+    .query(
+      "select count(*) from Clients where phoneNumber = '" +
         clientPhoneNumber +
         "'"
-      );
-    if (Object.values(QueryCheckForPhoneNumber[0][0])[0] === 0) {
-      var createQuery = await con
-        .promise()
-        .query("insert into Clients values (0,?,?,?,?,now())", [
-          clientFirstName,
-          clientLastName,
-          clientPhoneNumber,
-          address,
-        ]);
-      var Query = await con
-        .promise()
-        .query(
-          "select * from Clients where clientFirstName = '" +
+    );
+  if (Object.values(QueryCheckForPhoneNumber[0][0])[0] === 0) {
+    var createQuery = await con
+      .promise()
+      .query("insert into Clients values (0,?,?,?,?,now())", [
+        clientFirstName,
+        clientLastName,
+        clientPhoneNumber,
+        address,
+      ]);
+    var Query = await con
+      .promise()
+      .query(
+        "select * from Clients where clientFirstName = '" +
           clientFirstName +
           "'"
-        );
-      res.status(200).send(
-        JSON.stringify({
-          message: Query[0][0],
-        })
       );
-    } else {
-      res.status(400).send(
-        JSON.stringify({
-          Error: "The client already exist, try another phone number",
-        })
-      );
-    }
+    res.status(200).send(
+      JSON.stringify({
+        message: Query[0][0],
+      })
+    );
+  } else {
+    res.status(400).send(
+      JSON.stringify({
+        Error: "The client already exist, try another phone number",
+      })
+    );
+  }
 
-    con.end();
-    return false;
-  });
-      
+  con.end();
+  return false;
+});
 
 module.exports = router;
