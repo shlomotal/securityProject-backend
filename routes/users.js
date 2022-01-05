@@ -155,11 +155,11 @@ router.post("/login", async (req, res) => {
   //CHECK IF USER EXISTS
   responseExist = await con
     .promise()
-    .query("select count(*) as cnt from users where username=?", [
+    .query("call LoginCheckIfUserExist(?)", [
       req.body.username,
     ]);
-  console.log("exist: ", responseExist[0][0].cnt);
-  if (responseExist[0][0].cnt === 0) {
+  console.log("exist: ", Object.values(responseExist[0][0])[0].cnt);
+  if (Object.values(responseExist[0][0])[0].cnt === 0) {
     res.status(400);
     res.send(JSON.stringify({ error: "Incorrect username" }));
     con.end();
@@ -185,7 +185,7 @@ router.post("/login", async (req, res) => {
     );
   }
 
-  //Check if password is correct for UNSECURED sit (SQL Injection)
+  //Check if password is correct for UNSECURED site (SQL Injection)
   else {
     console.log("unsecured function");
     USERNAME = req.body.username;
@@ -206,12 +206,12 @@ router.post("/login", async (req, res) => {
 
   userId = await con
     .promise()
-    .query("select id from users where username=?", [req.body.username]);
-  console.log("user id: ", userId[0][0].id);
+    .query("call LoginRespondID(?)", [req.body.username]);
+  console.log("user id: ",  Object.values(userId[0][0])[0].id);
 
   if (!validPass) {
     if (config.get("loginRetries") != 0) {
-      failedLogins(userId[0][0].id);
+      failedLogins( Object.values(userId[0][0])[0].id);
     }
 
     res
@@ -225,16 +225,16 @@ router.post("/login", async (req, res) => {
   if (config.get("loginRetries") != 0) {
     var dateLock = await con
       .promise()
-      .query("SELECT dateLock FROM `failed_logins` WHERE `userId`=? LIMIT 1", [
-        userId[0][0].id,
+      .query("call LoginRespondDateLock(?)", [
+        Object.values(userId[0][0])[0].id,
       ]);
     console.log("*** checking dateLock: ", Object.values(dateLock[0][0])[0]);
     if (Object.values(dateLock[0][0])[0]) {
       var isTimePassed = await con
         .promise()
         .query(
-          "SELECT count(*) from failed_logins T where TIMESTAMPDIFF(MINUTE, T.dateLock, now()) > ? and userId = ?",
-          [config.get("lockTimeInMinutes"), userId[0][0].id]
+          "call LoginRespondCountFails(?,?)",
+          [config.get("lockTimeInMinutes"),  Object.values(userId[0][0])[0].id]
         );
       console.log("isTimePassed: ", Object.values(isTimePassed[0][0])[0]);
       if (Object.values(isTimePassed[0][0])[0] == 0) {
@@ -248,10 +248,10 @@ router.post("/login", async (req, res) => {
         var updateFailedLogins = await con
           .promise()
           .query(
-            "update failed_logins set failsCount=0, lastFail=null, dateLock=null where userId=?",
-            [userId[0][0].id]
+            "call UpdateFailedLogin(?)",
+            [ Object.values(userId[0][0])[0].id]
           );
-        console.log("updated: ", updateFailedLogins);
+        console.log("updated: ", Object.values(updateFailedLogins));
       }
     }
   }
@@ -259,7 +259,7 @@ router.post("/login", async (req, res) => {
   //update last login
   await con
     .promise()
-    .query("update users set lastLogin=now() where username=?", [
+    .query("call UpdateUsersLastLogin(?)", [
       req.body.username,
     ]);
 
