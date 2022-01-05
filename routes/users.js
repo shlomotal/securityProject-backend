@@ -414,12 +414,13 @@ async function failedLogins(userId) {
   // getting count of failed login attempts
   var countFailedLogins = await con
     .promise()
-    .query("select failsCount from failed_logins where userId=?", userId);
-  console.log("count of failed logins: ", countFailedLogins[0][0].failsCount);
+    .query("call GetfailsCount(?)", userId);
+    console.log("Count: ", Object.values(countFailedLogins[0][0])[0].failsCount);
+  console.log("count of failed logins: ", Object.values(countFailedLogins[0][0])[0].failsCount);
 
   // checking if need to lock
   var dateLock = null;
-  if (countFailedLogins[0][0].failsCount == config.get("loginRetries") - 1) {
+  if (Object.values(countFailedLogins[0][0])[0].failsCount == config.get("loginRetries") - 1) {
     console.log("locking");
     var locked = await con
       .promise()
@@ -429,18 +430,18 @@ async function failedLogins(userId) {
   }
 
   // checking if failed logins was already the maximun
-  var updatedCountFailedLogins = countFailedLogins[0][0].failsCount + 1;
+  var updatedCountFailedLogins = Object.values(countFailedLogins[0][0])[0].failsCount + 1;
   if (updatedCountFailedLogins > config.get("loginRetries")) {
     updatedCountFailedLogins = config.get("loginRetries");
   }
 
   console.log("updatedCountFailedLogins: ", updatedCountFailedLogins);
 
-  if (countFailedLogins[0][0].failsCount != config.get("loginRetries")) {
+  if (Object.values(countFailedLogins[0][0])[0].failsCount != config.get("loginRetries")) {
     console.log("updating failed logins table");
     var updateFailedLogins = await con
       .promise()
-      .query("update failed_logins set failsCount=? where userId=?", [
+      .query("call UpdateFailsCount(?,?)", [
         updatedCountFailedLogins,
         userId,
       ]);
@@ -448,8 +449,8 @@ async function failedLogins(userId) {
   }
   var updateLastFail = await con
     .promise()
-    .query("update failed_logins set lastFail=now() where userId=?", [userId]);
-  console.log("updateLastFail: ", updateLastFail);
+    .query("call UpdateFailedLoginLastFail(?)", [userId]);
+  //console.log("updateLastFail: ", object.values(updateLastFail[0][0])[0]);
 }
 
 // function to check if new password is the same like "n" last passwords
