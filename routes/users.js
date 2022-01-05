@@ -167,15 +167,21 @@ router.post("/login", async (req, res) => {
   }
   responsePassword = await con
     .promise()
-    .query("select password from users where username=?", [req.body.username]);
+    .query("call LoginPassword(?);", [req.body.username] , function (err, result) {
+      if (err) {
+          console.log("err:", err);
+      } else {
+          console.log("results:", result);
+      }
+  });
 
   //CHECK IF PASSWORD IS CORRECT for secured site
   if (config.get("isSecured")) {
-    console.log("responsePassword: ", responsePassword[0][0].password);
+    console.log("responsePassword: ", Object.values(responsePassword[0][0])[0].password);
     console.log("req.body.password: ", req.body.password);
     validPass = await bcrypt.compare(
       req.body.password,
-      responsePassword[0][0].password
+      Object.values(responsePassword[0][0])[0].password
     );
   }
 
