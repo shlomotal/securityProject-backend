@@ -780,18 +780,34 @@ router.post("/addClient", async function (req, res, next) {
         clientPhoneNumber,
         address,
       ]);
-      //console.log("insert query: ", createQuery);
-    var Query = await con
-      .promise()
-      .query(
-        "call GetSpecificUserFromClientsTable(?)" ,[clientPhoneNumber]);
-        console.log("Query:", Object.values(Query[0][0])[0]);
-    res.status(200).send(
-      JSON.stringify({
-        message: Object.values(Query[0][0])[0],
-      })
-    );
-  } else {
+      if(config.get("isSecured")){
+        var Query = await con
+        .promise()
+        .query(
+          "call GetSpecificUserFromClientsTable(?)" ,[clientPhoneNumber]);
+          console.log("Query:", Object.values(Query[0][0])[0]);
+          res.status(200).send(
+            JSON.stringify({
+              message: Object.values(Query[0][0])[0],
+            })
+          );
+      }
+      else
+      {
+        var Query = await con
+        .promise()
+        .query(
+          "select * from clients where phoneNumber = '" + clientPhoneNumber +"';");
+          console.log("Query:", Object.values(Query[0]));
+          res.status(200).send(
+            JSON.stringify({
+              message: Object.values(Query[0]),
+            })
+          );
+      }
+
+  } 
+  else {
     res.status(400).send(
       JSON.stringify({
         Error: "The client already exist, try another phone number",
