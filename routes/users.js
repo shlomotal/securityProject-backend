@@ -71,11 +71,11 @@ router.post("/signup", async function (req, res) {
 
   responseExist = await con
     .promise()
-    .query("select count(*) as cnt from users where username=?", [
+    .query("call GetCountUsername(?)", [
       req.body.username,
     ]);
-  console.log("exist: ", responseExist[0][0].cnt);
-  if (responseExist[0][0].cnt !== 0) {
+  console.log("exist: ", Object.values(responseExist[0][0])[0].cnt);
+  if (Object.values(responseExist[0][0])[0].cnt !== 0) {
     res.status(403).send(JSON.stringify({ error: "The username already exists" }));
     con.end();
     return false;
@@ -84,14 +84,15 @@ router.post("/signup", async function (req, res) {
     isPasswordInDictonaryPasswordsDb = await con
       .promise()
       .query(
-        "SELECT EXISTS(SELECT 1 FROM `dictonary_passwords` WHERE `password`=? LIMIT 1)",
+        "call CheckIfExist(?)",
         [req.body.confirmPassword]
       );
     console.log(
       "isPasswordInDictonaryPasswordsDb2: ",
-      Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0]
+      Object.values(Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0])[0]
     );
-    if (Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0] == 1) {
+    if (Object.values(Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0])[0] != 0) {
+      console.log("The password is very common, change it");
       res
         .status(404)
         .send(
@@ -116,22 +117,27 @@ router.post("/signup", async function (req, res) {
       hashedPassword,
       req.body.password,
     ]);
+    if(!config.get("isSecured")){
+      await con
+      .promise()
+      .query("UPDATE users set password = '" + req.body.password +"' WHERE username = '"+ req.body.username +"';");
+    }
   console.log("createdQuery: " + createQuery[0].insertId);
   userId = createQuery[0].insertId;
 
   var insertIntoFailedLogins = await con
     .promise()
-    .query("insert into failed_logins (userId, failsCount) values (?,0)", [
+    .query("call InsertFailLogin(?)", [
       userId,
     ]);
   res.send(
     JSON.stringify({ status: "User created successfully. userId:" + userId })
   );
-  console.log("insert into failed_logins: " + insertIntoFailedLogins);
+  console.log("insert into failed_logins: ");
   //update history table
   var createHistoryQuery = await con
     .promise()
-    .query("insert into passwordhistory values (0,?,?,now())", [
+    .query("call insertValuesToPassHistory(?,?)", [
       req.body.username,
       req.body.password,
     ]);
@@ -228,7 +234,7 @@ router.post("/login", async (req, res) => {
       .query("call LoginRespondDateLock(?)", [
         Object.values(userId[0][0])[0].id,
       ]);
-    console.log("*** checking dateLock: ", Object.values(dateLock[0][0])[0]);
+    console.log("* checking dateLock: ", Object.values(dateLock[0][0])[0]);
     if (Object.values(dateLock[0][0])[0]) {
       var isTimePassed = await con
         .promise()
@@ -472,6 +478,7 @@ async function isNewPasswordTheSameOfOtherLasPassowrd(i_Password, i_Username) {
   con.end();
   return Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0] > 0;
 }
+
 //send email
 function sendEmail(email, token) {
   var email = email;
@@ -495,7 +502,7 @@ function sendEmail(email, token) {
   };
   mail.sendMail(mailOptions, function (error, info) {
     if (error) {
-      console.log("There is any problem");
+      console.log("There is any problem", error);
     } else {
       console.log("the email sent succefully");
       res.status(200).send(JSON.stringify({ status: "User login successful" }));
@@ -577,6 +584,7 @@ router.post("/reset-password-email", function (req, res, next) {
     }
   );
 });
+
 /* update password to database */
 router.post("/update-password", function (req, res, next) {
   var username = req.body.username;
