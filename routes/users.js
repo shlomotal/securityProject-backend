@@ -768,14 +768,12 @@ router.post("/addClient", async function (req, res, next) {
   var QueryCheckForPhoneNumber = await con
     .promise()
     .query(
-      "select count(*) from Clients where phoneNumber = '" +
-        clientPhoneNumber +
-        "'"
-    );
-  if (Object.values(QueryCheckForPhoneNumber[0][0])[0] === 0) {
+      "call GetClientWithSpecificPhoneNumber(?)", [clientPhoneNumber]);
+      console.log("QueryCheckForPhoneNumber", Object.values((QueryCheckForPhoneNumber[0][0])[0])[0])
+  if (Object.values((QueryCheckForPhoneNumber[0][0])[0])[0] === 0) {
     var createQuery = await con
       .promise()
-      .query("insert into Clients values (0,?,?,?,?,now())", [
+      .query("call InsertValuesToClientsTable(?,?,?,?)", [
         clientFirstName,
         clientLastName,
         clientPhoneNumber,
@@ -784,13 +782,11 @@ router.post("/addClient", async function (req, res, next) {
     var Query = await con
       .promise()
       .query(
-        "select * from Clients where clientFirstName = '" +
-          clientFirstName +
-          "'"
-      );
+        "call GetSpecificUserFromClientsTable(?)" ,[clientPhoneNumber]);
+        console.log("Query:", Object.values(Query[0][0])[0]);
     res.status(200).send(
       JSON.stringify({
-        message: Query[0][0],
+        message: Object.values(Query[0][0])[0],
       })
     );
   } else {
