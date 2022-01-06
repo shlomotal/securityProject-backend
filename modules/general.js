@@ -6,7 +6,7 @@ module.exports = {
         var con = mysql.createConnection({
             host: "localhost",
             user: "root",
-            password: "root",
+            password: "318688611",
             database: "securityProjectSchema",
         })
         
