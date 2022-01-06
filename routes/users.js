@@ -38,7 +38,7 @@ router.post("/signup", async function (req, res) {
   );
   if (complexPassword) {
     if (!strongRegex.test(req.body.password)) {
-      res.status(400).send(
+      res.status(401).send(
         JSON.stringify({
           error: "Password is too weak",
         })
@@ -60,7 +60,7 @@ router.post("/signup", async function (req, res) {
   }
   if (!validEmailRegex.test(req.body.username)) {
     console.log("Email is not valid");
-    res.status(400).send(
+    res.status(402).send(
       JSON.stringify({
         error: "Email is not valid",
       })
@@ -76,7 +76,7 @@ router.post("/signup", async function (req, res) {
     ]);
   console.log("exist: ", responseExist[0][0].cnt);
   if (responseExist[0][0].cnt !== 0) {
-    res.send(JSON.stringify({ error: "The username already exists" }));
+    res.status(403).send(JSON.stringify({ error: "The username already exists" }));
     con.end();
     return false;
   }
@@ -93,7 +93,7 @@ router.post("/signup", async function (req, res) {
     );
     if (Object.values(isPasswordInDictonaryPasswordsDb[0][0])[0] == 1) {
       res
-        .status(400)
+        .status(404)
         .send(
           JSON.stringify({ error: "The password is very common, change it" })
         );
@@ -760,6 +760,7 @@ router.post("/update-password", function (req, res, next) {
 
 //insert new client to DB
 router.post("/addClient", async function (req, res, next) {
+  console.log("Entering add client");
   var con = general.getConn();
   var clientFirstName = req.body.clientFirstName;
   var clientLastName = req.body.clientLastName;
@@ -779,6 +780,7 @@ router.post("/addClient", async function (req, res, next) {
         clientPhoneNumber,
         address,
       ]);
+      //console.log("insert query: ", createQuery);
     var Query = await con
       .promise()
       .query(
@@ -800,5 +802,6 @@ router.post("/addClient", async function (req, res, next) {
   con.end();
   return false;
 });
+
 
 module.exports = router;
