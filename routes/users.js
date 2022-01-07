@@ -245,7 +245,7 @@ router.post("/login", async (req, res) => {
       console.log("isTimePassed: ", Object.values(isTimePassed[0][0])[0]);
       if (Object.values(isTimePassed[0][0])[0] == 0) {
         console.log("user locked");
-        res.status(400).send(JSON.stringify({ error: "User locked" }));
+        res.status(404).send(JSON.stringify({ error: "User locked" }));
         con.end();
         return false;
       } else {
